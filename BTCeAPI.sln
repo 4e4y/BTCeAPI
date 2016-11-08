@@ -1,0 +1,26 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BTCeAPI", "BTCeAPI.csproj", "{9C0C4576-B636-4CDA-B003-9F3832E4BC6E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BTCeAPITest", "..\BTCeAPITest\BTCeAPITest.csproj", "{45D5C00A-4246-4179-AE6B-3909DE26795B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9C0C4576-B636-4CDA-B003-9F3832E4BC6E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C0C4576-B636-4CDA-B003-9F3832E4BC6E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C0C4576-B636-4CDA-B003-9F3832E4BC6E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C0C4576-B636-4CDA-B003-9F3832E4BC6E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45D5C00A-4246-4179-AE6B-3909DE26795B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45D5C00A-4246-4179-AE6B-3909DE26795B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45D5C00A-4246-4179-AE6B-3909DE26795B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45D5C00A-4246-4179-AE6B-3909DE26795B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
