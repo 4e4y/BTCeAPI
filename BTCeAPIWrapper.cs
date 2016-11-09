@@ -230,7 +230,7 @@ namespace BTCeAPI
             Info.Start();
         }
 
-        public void PlaceOrder(BTCePair pair, BTCeTradeType type, decimal rate, decimal amount)
+        public TradeAnswer PlaceOrder(BTCePair pair, BTCeTradeType type, decimal rate, decimal amount)
         {
             if (!authenticated)
             {
@@ -245,6 +245,8 @@ namespace BTCeAPI
                 { "rate", DecimalToString(rate) },
                 { "amount", DecimalToString(amount) }
             });
+
+            return TradeAnswer.ReadFromJSON(resultStr);
         }
 
         #endregion Public Methods
