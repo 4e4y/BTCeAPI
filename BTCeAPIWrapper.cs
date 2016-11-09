@@ -12,19 +12,52 @@ using System.Web;
 
 namespace BTCeAPI
 {
+    #region Helper classes
+
+    /// <summary>
+    /// Helper class for converting from UnixTime to .NET DateTime object
+    /// </summary>
     static class UnixTime
     {
         static DateTime unixEpoch;
+
+        #region Constructors
+
+        /// <summary>
+        /// Default Constrcutor - initialize referent Date - 1970-01-01
+        /// </summary>
         static UnixTime()
         {
             unixEpoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         }
 
+        #endregion Constructors
+
+        /// <summary>
+        /// Returns current Unix Time
+        /// </summary>
         public static UInt32 Now { get { return GetFromDateTime(DateTime.UtcNow); } }
+
+        /// <summary>
+        /// Returns Unix Time for passed Date
+        /// </summary>
+        /// <param name="d">Referent Date</param>
+        /// <returns>Total seconds</returns>
         public static UInt32 GetFromDateTime(DateTime d) { return (UInt32)(d - unixEpoch).TotalSeconds; }
+
+        /// <summary>
+        /// Converts Unix Time to .NET DateTime object
+        /// </summary>
+        /// <param name="unixtime">Unix Time to convert</param>
+        /// <returns>.NET DateTime object</returns>
         public static DateTime ConvertToDateTime(UInt32 unixtime) { return unixEpoch.AddSeconds(unixtime); }
     }
 
+    #endregion Helper classes
+
+    /// <summary>
+    /// BTCe API Wrapper
+    /// </summary>
     public class BTCeAPIWrapper
     {
         #region Static Members
@@ -63,24 +96,69 @@ namespace BTCeAPI
 
         #endregion Private members
 
-        #region Public Members
+        #region Public Event Handlers
 
+        /// <summary>
+        /// Event Handler fired when new Price information is retrieved
+        /// </summary>
         public EventHandler PriceChanged;
+
+        /// <summary>
+        /// Event Handler fired when new Fee information is received
+        /// </summary>
         public EventHandler FeeChanged;
+
+        /// <summary>
+        /// Event Handler fired when new Account information is received
+        /// Thihs event should be used after Authentication data is provided
+        ///     see method Credential(string key, string secret)
+        /// </summary>
         public EventHandler InfoReceived;
+
+        /// <summary>
+        /// Event Handler fired when new Active Orders information is received
+        /// Thihs event should be used after Authentication data is provided
+        ///     see method Credential(string key, string secret)
+        /// </summary>
         public EventHandler ActiveOrdersReceived;
 
-        #endregion Public Members
+        #endregion Public Event Handlers
 
         #region Properties
 
+        /// <summary>
+        /// Sets Ticker/Price change retrieval period in seconds
+        /// Default period is 1 second
+        /// </summary>
         public int TickerTimeout { private get { return tickerTimeout; } set { Ticker.Stop(); tickerTimeout = value; Ticker.Interval = tickerTimeout * 1000; Ticker.Start(); } }
+
+        /// <summary>
+        /// Sets Fee change retrieval period in seconds
+        /// Default period is 259200 seconds (3 hours)
+        /// </summary>
         public int FeeTimeout { private get { return feeTimeout; } set { Fee.Stop(); feeTimeout = value; Fee.Interval = feeTimeout * 1000; Fee.Start(); } }
+
+        /// <summary>
+        /// Sets Active Orders change retrieval period in seconds
+        /// Default period is 5 seconds
+        /// </summary>
         public int OrdersTimeout { private get { return ordersTimeout; } set { ActiveOrders.Stop(); ordersTimeout = value; ActiveOrders.Interval = ordersTimeout * 1000; if (startActiveOtrders) { ActiveOrders.Start(); } } }
+
+        /// <summary>
+        /// Sets active Pair (Currency) that will be used for Ticker/Price and Active Orders retrieval
+        /// DEfault value is btc_usd
+        /// </summary>
         public BTCePair Currency { private get { return currency; } set { currency = value; Ticker.Stop(); Ticker.Start(); } }
 
+        /// <summary>
+        /// Gets Default Fee as default Fee rerieval period is every 3 hours and before next retrieval
+        /// Also this Default Fee can be used if there is API issues with retrieving onine Fee
+        /// </summary>
         public FeeInfo DefaultFee { get { return FeeInfo.ReadFromJSON("{\"trade\":0.2}"); } }
 
+        /// <summary>
+        /// Returns BTCeAPIWrapper object
+        /// </summary>
         public static BTCeAPIWrapper Instance
         {
             get { 
@@ -217,6 +295,11 @@ namespace BTCeAPI
 
         #region Public Methods
 
+        /// <summary>
+        /// Sets Credetials that will be used for Authenticating against BTCe services
+        /// </summary>
+        /// <param name="key">BTCe API Key</param>
+        /// <param name="secret">BTCe API Sercet - it will be used once to create HMAC-SHA512 object for signing API requests </param>
         public void Credential(string key, string secret)
         {
             Info.Stop();
@@ -230,6 +313,14 @@ namespace BTCeAPI
             Info.Start();
         }
 
+        /// <summary>
+        /// Place single trade with passed parameters
+        /// </summary>
+        /// <param name="pair">Trade Pair (currency)</param>
+        /// <param name="type">Trade Type</param>
+        /// <param name="rate">Trade Rate</param>
+        /// <param name="amount">Trade Amount</param>
+        /// <returns>On successful operation will return populated TradeAnswer, on error will throw BTCeException with original BTCe API error message</returns>
         public TradeAnswer PlaceOrder(BTCePair pair, BTCeTradeType type, decimal rate, decimal amount)
         {
             if (!authenticated)
@@ -253,7 +344,7 @@ namespace BTCeAPI
 
         #region Timer Callbacks
 
-        void CheckForNewFee(object sender, ElapsedEventArgs e)
+        private void CheckForNewFee(object sender, ElapsedEventArgs e)
         {
             Fee.Stop();
 
@@ -295,7 +386,7 @@ namespace BTCeAPI
             Info.Start();
         }
 
-        void GetActiveOrders(object sender, ElapsedEventArgs e)
+        private void GetActiveOrders(object sender, ElapsedEventArgs e)
         {
             ActiveOrders.Stop();
 
