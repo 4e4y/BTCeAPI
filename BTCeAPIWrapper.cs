@@ -65,12 +65,39 @@ namespace BTCeAPI
     {
         #region Constanrs
 
+        /// <summary>
+        /// Indicates Price Change event to be pushed always
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_ALWAYS = 0;
+
+        /// <summary>
+        /// Indicates Price Change event to be pushed when BUY price change
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_BUY = 1;
+
+        /// <summary>
+        /// Indicates Price Change event to be pushed when SELL price change
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_SELL = 2;
+
+        /// <summary>
+        /// Indicates Price Change event to be pushed when BUY price is greater then privious one
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_BUY_UP = 4;
+
+        /// <summary>
+        /// Indicates Price Change event to be pushed when BUY price is lower then privious one
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_BUY_DOWN = 8;
+
+        /// <summary>
+        /// Indicates Price Change event to be pushed when SELL price is greater then privious one
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_SELL_UP = 16;
+
+        /// <summary>
+        /// Indicates Price Change event to be pushed when SELL price is lower then privious one
+        /// </summary>
         public const int PUSH_PRICE_CHANGE_SELL_DOWN = 32;
 
         #endregion Constanrs
@@ -341,6 +368,8 @@ namespace BTCeAPI
             this.key = key;
             hashMaker = new HMACSHA512(Encoding.ASCII.GetBytes(secret));
 
+            authenticated = false;
+
             startActiveOtrders = false;
 
             Info.Start();
@@ -371,6 +400,28 @@ namespace BTCeAPI
             });
 
             return TradeAnswer.ReadFromJSON(resultStr);
+        }
+
+        /// <summary>
+        /// Retrieves Order infromation for provided Order ID.
+        /// If no Order with provided ID is found - BTCeException is thrown
+        /// </summary>
+        /// <param name="orderId">Order ID</param>
+        /// <returns>Order information for supplied ID</returns>
+        public OrderInfo GetOrderInformation(int orderId)
+        {
+            if (!authenticated)
+            {
+                throw new BTCeAPIException("Not Authenticated");
+            }
+
+            var resultStr = Query(new Dictionary<string, string>()
+            {
+                { "method", "OrderInfo" },
+                { "order_id", orderId.ToString() }
+            });
+
+            return OrderInfo.ReadFromJSON(resultStr);
         }
 
         #endregion Public Methods
@@ -522,6 +573,8 @@ namespace BTCeAPI
                     AccountInfo info = AccountInfo.ReadFromJSON(resultStr);
                     InfoReceived(info, EventArgs.Empty);
 
+                    authenticated = true;
+
                     if (!startActiveOtrders)
                     {
                         ActiveOrders.Start();
@@ -555,6 +608,7 @@ namespace BTCeAPI
                 try
                 {
                     OrdersList orders = OrdersList.ReadFromJSON(resultStr);
+
                     ActiveOrdersReceived(orders, EventArgs.Empty);
 
                     ActiveOrders.Start();

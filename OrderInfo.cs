@@ -24,6 +24,7 @@ namespace BTCeAPI
 
             return sb.ToString();
         }
+
         public static OrderInfo ReadFromJSON(string order, int orderId)
         {
             JObject o = JObject.Parse(order) as JObject;
@@ -44,6 +45,25 @@ namespace BTCeAPI
             };
 
             return orderInfo;
+        }
+
+        public static OrderInfo ReadFromJSON(string order)
+        {
+            JObject data = JObject.Parse(order)["return"] as JObject;
+            JValue success = JObject.Parse(order)["success"] as JValue;
+            JValue error = JObject.Parse(order)["error"] as JValue;
+
+            if ((int)success == 1)
+            {
+                foreach (var orderObject in data)
+                {
+                    return OrderInfo.ReadFromJSON(orderObject.Value.ToString(), int.Parse(orderObject.Key.ToString()));
+                }
+
+                return null;
+            }
+
+            throw new BTCeAPIException((string)error);
         }
     }
 }
