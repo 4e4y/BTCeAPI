@@ -19,6 +19,9 @@ namespace BTCeAPI
     /// </summary>
     static class UnixTime
     {
+        /// <summary>
+        /// Initial Reference Date for Unix Time conversions
+        /// </summary>
         static DateTime unixEpoch;
 
         #region Constructors
@@ -60,6 +63,18 @@ namespace BTCeAPI
     /// </summary>
     public class BTCeAPIWrapper
     {
+        #region Constanrs
+
+        public const int PUSH_PRICE_CHANGE_ALWAYS = 0;
+        public const int PUSH_PRICE_CHANGE_BUY = 1;
+        public const int PUSH_PRICE_CHANGE_SELL = 2;
+        public const int PUSH_PRICE_CHANGE_BUY_UP = 4;
+        public const int PUSH_PRICE_CHANGE_BUY_DOWN = 8;
+        public const int PUSH_PRICE_CHANGE_SELL_UP = 16;
+        public const int PUSH_PRICE_CHANGE_SELL_DOWN = 32;
+
+        #endregion Constanrs
+
         #region Static Members
 
         private static ILog logger = log4net.LogManager.GetLogger("Console");
@@ -94,6 +109,8 @@ namespace BTCeAPI
         private bool startActiveOtrders = false;
         private bool authenticated = false;
 
+        private TickerInfo latestTicker = null;
+        
         #endregion Private members
 
         #region Public Event Handlers
@@ -157,6 +174,19 @@ namespace BTCeAPI
         public FeeInfo DefaultFee { get { return FeeInfo.ReadFromJSON("{\"trade\":0.2}"); } }
 
         /// <summary>
+        /// Indicates which Price Change should be monitored in order to push Price information
+        /// Use the following available constants (you can combine then using |):
+        ///     PUSH_PRICE_CHANGE_ALWAYS - always send latest Price information (default value)
+        ///     PUSH_PRICE_CHANGE_BUY - send Price infromation when there is change in BUY price
+        ///     PUSH_PRICE_CHANGE_SELL - send Price infromation when there is change in SELL price
+        ///     PUSH_PRICE_CHANGE_BUY_UP - send Price infromation when there is increase in BUY price
+        ///     PUSH_PRICE_CHANGE_BUY_DOWN - send Price infromation when there is decrease in BUY price
+        ///     PUSH_PRICE_CHANGE_SELL_UP - send Price infromation when there is increase in SELL price
+        ///     PUSH_PRICE_CHANGE_SELL_DOWN - send Price infromation when there is decrease in SELL price
+        /// </summary>
+        public int PriceChangePushIndicator { private get; set; }
+
+        /// <summary>
         /// Returns BTCeAPIWrapper object
         /// </summary>
         public static BTCeAPIWrapper Instance
@@ -183,6 +213,8 @@ namespace BTCeAPI
 
         private BTCeAPIWrapper()
         {
+            PriceChangePushIndicator = PUSH_PRICE_CHANGE_ALWAYS;
+
             Ticker.Interval = TickerTimeout * 1000;
             Ticker.Elapsed += CheckForNewPrice;
             Ticker.Start();
@@ -192,6 +224,7 @@ namespace BTCeAPI
             Fee.Interval = FeeTimeout * 1000;
             Fee.Elapsed += CheckForNewFee;
             Fee.Start();
+            CheckForNewFee(null, null);
 
             ActiveOrders.Interval = ordersTimeout * 1000;
             ActiveOrders.Elapsed += GetActiveOrders;
@@ -350,9 +383,14 @@ namespace BTCeAPI
 
             if (FeeChanged != null)
             {
+                Fee.Interval = feeTimeout * 1000;
                 new System.Threading.Thread(CallBTCeAPIFee).Start();
 
                 return;
+            }
+            else
+            {
+                Fee.Interval = 1000;
             }
 
             Fee.Start();
@@ -417,11 +455,31 @@ namespace BTCeAPI
                 throw new Exception("Non HTTP WebRequest");
             }
 
+            TickerInfo ticker = TickerInfo.ReadFromJSON(new StreamReader(request.GetResponse().GetResponseStream()).ReadToEnd());
+
             if (PriceChanged != null)
             {
-                PriceChanged(
-                    TickerInfo.ReadFromJSON(new StreamReader(request.GetResponse().GetResponseStream()).ReadToEnd()), 
-                    EventArgs.Empty);
+                if (
+                    latestTicker == null ||
+                    PriceChangePushIndicator == PUSH_PRICE_CHANGE_ALWAYS ||
+                    ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_BUY) > 0 && latestTicker.Buy != ticker.Buy) ||
+                    ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_SELL) > 0 && latestTicker.Sell != ticker.Sell) ||
+                    ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_BUY_DOWN) > 0 && latestTicker.Buy > ticker.Buy) ||
+                    ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_BUY_UP) > 0 && latestTicker.Buy < ticker.Buy) ||
+                    ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_SELL_DOWN) > 0 && latestTicker.Sell > ticker.Sell) ||
+                    ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_SELL_UP) > 0 && latestTicker.Sell < ticker.Sell)
+                )
+                {
+                    PriceChanged(
+                        ticker,
+                        EventArgs.Empty);
+                }
+
+                latestTicker = ticker;
+            }
+            else
+            {
+                latestTicker = ticker;
             }
 
             Ticker.Start();
