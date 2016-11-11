@@ -137,6 +137,8 @@ namespace BTCeAPI
         private bool authenticated = false;
 
         private TickerInfo latestTicker = null;
+        private int latestActiveOrdersCount = -1;
+        private decimal latestTotalAmount = -1;
         
         #endregion Private members
 
@@ -154,17 +156,31 @@ namespace BTCeAPI
 
         /// <summary>
         /// Event Handler fired when new Account information is received
-        /// Thihs event should be used after Authentication data is provided
+        /// This event should be used after Authentication data is provided
         ///     see method Credential(string key, string secret)
         /// </summary>
         public EventHandler InfoReceived;
 
         /// <summary>
         /// Event Handler fired when new Active Orders information is received
-        /// Thihs event should be used after Authentication data is provided
+        /// This event should be used after Authentication data is provided
         ///     see method Credential(string key, string secret)
         /// </summary>
         public EventHandler ActiveOrdersReceived;
+
+        /// <summary>
+        /// Event Handler fired when new Active Orders count has changed
+        /// This event should be used after Authentication data is provided
+        ///     see method Credential(string key, string secret)
+        /// </summary>
+        public EventHandler ActiveOrdersCountChange;
+
+        /// <summary>
+        /// Event Handler fired when total Active Orders Amount has changed
+        /// This event should be used after Authentication data is provided
+        ///     see method Credential(string key, string secret)
+        /// </summary>
+        public EventHandler ActiveOrdersTotalAmountChange;
 
         #endregion Public Event Handlers
 
@@ -479,7 +495,9 @@ namespace BTCeAPI
         {
             ActiveOrders.Stop();
 
-            if (ActiveOrdersReceived != null)
+            if (ActiveOrdersReceived != null ||
+                ActiveOrdersCountChange != null ||
+                ActiveOrdersTotalAmountChange != null)
             {
                 new System.Threading.Thread(CallBTCeAPIActiveOrders).Start();
 
@@ -603,13 +621,48 @@ namespace BTCeAPI
                 { "pair", BtcePairHelper.ToString(currency) }
             });
 
-            if (ActiveOrdersReceived != null)
+            if (ActiveOrdersReceived != null ||
+                ActiveOrdersCountChange != null ||
+                ActiveOrdersTotalAmountChange != null)
             {
                 try
                 {
                     OrdersList orders = OrdersList.ReadFromJSON(resultStr);
 
-                    ActiveOrdersReceived(orders, EventArgs.Empty);
+                    var totalAmount = orders.List.Sum(x => x.Value.Amount);
+
+                    if (ActiveOrdersReceived != null)
+                    {
+                        ActiveOrdersReceived(orders, EventArgs.Empty);
+                    }
+
+                    if (ActiveOrdersCountChange != null)
+                    {
+                        if (latestActiveOrdersCount > -1 &&
+                            latestActiveOrdersCount != orders.List.Count)
+                        {
+                            ActiveOrdersCountChange(orders, new DecimalEventArgs(latestActiveOrdersCount));
+                        }
+                    }
+
+                    if (ActiveOrdersTotalAmountChange != null)
+                    {
+                        if (latestTotalAmount > -1 &&
+                            latestTotalAmount != totalAmount)
+                        {
+                            ActiveOrdersTotalAmountChange(orders, new DecimalEventArgs(latestTotalAmount));
+                        }
+                    }
+
+                    if (latestActiveOrdersCount != orders.List.Count)
+                    {
+                        latestActiveOrdersCount = orders.List.Count;
+                    }
+
+                    if (latestTotalAmount != totalAmount)
+                    {
+                        latestTotalAmount = totalAmount;
+                    }
 
                     ActiveOrders.Start();
                 }
