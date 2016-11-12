@@ -112,7 +112,7 @@ namespace BTCeAPI
         private static string BTCeAPITickerURL = "https://btc-e.com/api/2/{0}/ticker";
         private static string BTCeAPIFeeURL = "https://btc-e.com/api/2/{0}/fee";
         private static string BTCeAPIPrivateURL = "https://btc-e.com/tapi";
-        public static UInt32 Nonce = UnixTime.Now;
+        private static UInt32 Nonce = UnixTime.Now;
         private static UInt32 lastNonce = 0;
 
         #endregion Static Members
@@ -125,7 +125,7 @@ namespace BTCeAPI
         private Timer Info = new Timer();
 
         private int tickerTimeout = 1;
-        private int feeTimeout = 259200;
+        private int feeTimeout = 1;
         private int ordersTimeout = 5;
         private int infoTimeout = 2;
         private BTCePair currency = BTCePair.btc_usd;
@@ -139,6 +139,7 @@ namespace BTCeAPI
         private TickerInfo latestTicker = null;
         private int latestActiveOrdersCount = -1;
         private decimal latestTotalAmount = -1;
+        private FeeInfo latestFee = null;
         
         #endregion Private members
 
@@ -569,9 +570,14 @@ namespace BTCeAPI
 
             if (FeeChanged != null)
             {
-                FeeChanged(
-                    FeeInfo.ReadFromJSON(new StreamReader(request.GetResponse().GetResponseStream()).ReadToEnd()),
-                    EventArgs.Empty);
+                FeeInfo currentFee = FeeInfo.ReadFromJSON(new StreamReader(request.GetResponse().GetResponseStream()).ReadToEnd());
+                if (latestFee == null ||
+                    latestFee.Fee != currentFee.Fee)
+                {
+                    FeeChanged(currentFee, EventArgs.Empty);
+                }
+
+                latestFee = currentFee;
             }
 
             Fee.Start();
