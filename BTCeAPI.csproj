@@ -50,8 +50,10 @@
   <ItemGroup>
     <Compile Include="AccountInfo.cs" />
     <Compile Include="BTCeAPIException.cs" />
+    <Compile Include="BTCeCrrency.cs" />
     <Compile Include="BTCePair.cs" />
     <Compile Include="BTCeAPIWrapper.cs" />
+    <Compile Include="CurrencyEventArgs.cs" />
     <Compile Include="DecimalEventArgs.cs" />
     <Compile Include="FeeInfo.cs" />
     <Compile Include="OrderInfo.cs" />

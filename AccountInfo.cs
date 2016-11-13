@@ -8,10 +8,10 @@ namespace BTCeAPI
 {
     public class Currency
     {
-        public string Name { get; private set; }
+        public BTCeCurrency Name { get; private set; }
         public decimal Value { get; private set; }
 
-        public Currency(string name, decimal value)
+        public Currency(BTCeCurrency name, decimal value)
         {
             Name = name;
             Value = value;
@@ -48,6 +48,17 @@ namespace BTCeAPI
 
         private AccountInfo() { }
 
+        public decimal CurrencyValue(BTCeCurrency currency)
+        {
+            Currency c = Currencies.Find(x => x.Name == currency);
+            if (c != null)
+            {
+                return c.Value;
+            }
+
+            return -1;
+        }
+
         public override string ToString()
         {
             StringBuilder sb = new StringBuilder();
@@ -71,8 +82,6 @@ namespace BTCeAPI
 
         public static AccountInfo ReadFromJSON(string info)
         {
-            // var funds = Funds.ReadFromJObject(o["funds"] as JObject);
-
             JObject data = JObject.Parse(info)["return"] as JObject;
             JValue success = JObject.Parse(info)["success"] as JValue;
             JValue error = JObject.Parse(info)["error"] as JValue;
@@ -85,12 +94,11 @@ namespace BTCeAPI
 
                 foreach (string key in o.Keys)
                 {
-                    currencies.Add(new Currency(key, o[key]));
+                    currencies.Add(new Currency(BTCeCurrencyHelper.FromString(key), o[key]));
                 }
 
                 var userInfo = new AccountInfo()
                 {
-                    // Funds = funds,
                     Currencies = currencies,
                     Rights = Rights.ReadFromJSON(data["rights"] as JObject),
                     TransactionsCount = data.Value<int>("transaction_count"),

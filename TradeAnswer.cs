@@ -29,7 +29,7 @@ namespace BTCeAPI
 
                 foreach (string key in o.Keys)
                 {
-                    currencies.Add(new Currency(key, o[key]));
+                    currencies.Add(new Currency(BTCeCurrencyHelper.FromString(key), o[key]));
                 }
 
                 TradeAnswer tradeAnwer = new TradeAnswer()

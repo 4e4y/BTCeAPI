@@ -140,6 +140,7 @@ namespace BTCeAPI
         private int latestActiveOrdersCount = -1;
         private decimal latestTotalAmount = -1;
         private FeeInfo latestFee = null;
+        private AccountInfo latestAccountInfo = null;
         
         #endregion Private members
 
@@ -174,14 +175,21 @@ namespace BTCeAPI
         /// This event should be used after Authentication data is provided
         ///     see method Credential(string key, string secret)
         /// </summary>
-        public EventHandler ActiveOrdersCountChange;
+        public EventHandler ActiveOrdersCountChanged;
 
         /// <summary>
         /// Event Handler fired when total Active Orders Amount has changed
         /// This event should be used after Authentication data is provided
         ///     see method Credential(string key, string secret)
         /// </summary>
-        public EventHandler ActiveOrdersTotalAmountChange;
+        public EventHandler ActiveOrdersTotalAmountChanged;
+
+        /// <summary>
+        /// Event Handler fired when specific Currency Amount has changed
+        /// This event should be used after Authentication data is provided
+        ///     see method Credential(string key, string secret)
+        /// </summary>
+        public EventHandler CurrencyAmountChanged;
 
         #endregion Public Event Handlers
 
@@ -497,8 +505,8 @@ namespace BTCeAPI
             ActiveOrders.Stop();
 
             if (ActiveOrdersReceived != null ||
-                ActiveOrdersCountChange != null ||
-                ActiveOrdersTotalAmountChange != null)
+                ActiveOrdersCountChanged != null ||
+                ActiveOrdersTotalAmountChanged != null)
             {
                 new System.Threading.Thread(CallBTCeAPIActiveOrders).Start();
 
@@ -590,11 +598,12 @@ namespace BTCeAPI
                 { "method", "getInfo" }
             });
 
-            if (InfoReceived != null)
+            try
             {
-                try
+                AccountInfo info = AccountInfo.ReadFromJSON(resultStr);
+
+                if (InfoReceived != null)
                 {
-                    AccountInfo info = AccountInfo.ReadFromJSON(resultStr);
                     InfoReceived(info, EventArgs.Empty);
 
                     authenticated = true;
@@ -604,18 +613,42 @@ namespace BTCeAPI
                         ActiveOrders.Start();
                         startActiveOtrders = true;
                     }
-
-                    Info.Start();
                 }
-                catch (BTCeAPIException e)
+                
+                if (CurrencyAmountChanged != null)
                 {
-                    InfoReceived(e, EventArgs.Empty);
-                }
-                catch (Exception ex)
-                {
-                    InfoReceived(ex, EventArgs.Empty);
+                    if (latestAccountInfo != null)
+                    {
+                        List<BTCeCurrency> changedCurrencies = new List<BTCeAPI.BTCeCurrency>();
+
+                        foreach (Currency c in info.Currencies)
+                        {
+                            if (c.Value != latestAccountInfo.CurrencyValue(c.Name))
+                            {
+                                changedCurrencies.Add(c.Name);
+                            }
+                        }
+
+                        if (changedCurrencies.Count > 0)
+                        {
+                            CurrencyAmountChanged(info, new CurrencyEventArgs(changedCurrencies));
+                        }
+                    }
                 }
 
+                latestAccountInfo = info;
+
+                Info.Start();
+            }
+            catch (BTCeAPIException e)
+            {
+                InfoReceived(e, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                InfoReceived(ex, EventArgs.Empty);
+
+                Info.Start();
             }
         }
 
@@ -628,8 +661,8 @@ namespace BTCeAPI
             });
 
             if (ActiveOrdersReceived != null ||
-                ActiveOrdersCountChange != null ||
-                ActiveOrdersTotalAmountChange != null)
+                ActiveOrdersCountChanged != null ||
+                ActiveOrdersTotalAmountChanged != null)
             {
                 try
                 {
@@ -642,21 +675,21 @@ namespace BTCeAPI
                         ActiveOrdersReceived(orders, EventArgs.Empty);
                     }
 
-                    if (ActiveOrdersCountChange != null)
+                    if (ActiveOrdersCountChanged != null)
                     {
                         if (latestActiveOrdersCount > -1 &&
                             latestActiveOrdersCount != orders.List.Count)
                         {
-                            ActiveOrdersCountChange(orders, new DecimalEventArgs(latestActiveOrdersCount));
+                            ActiveOrdersCountChanged(orders, new DecimalEventArgs(latestActiveOrdersCount));
                         }
                     }
 
-                    if (ActiveOrdersTotalAmountChange != null)
+                    if (ActiveOrdersTotalAmountChanged != null)
                     {
                         if (latestTotalAmount > -1 &&
                             latestTotalAmount != totalAmount)
                         {
-                            ActiveOrdersTotalAmountChange(orders, new DecimalEventArgs(latestTotalAmount));
+                            ActiveOrdersTotalAmountChanged(orders, new DecimalEventArgs(latestTotalAmount));
                         }
                     }
 
