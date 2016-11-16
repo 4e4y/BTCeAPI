@@ -15,7 +15,7 @@ namespace BTCeAPI
         public decimal Low { get; private set; }
         public decimal Sell { get; private set; }
         public decimal Volume { get; private set; }
-        public decimal VolumeCurrent { get; private set; }
+        public decimal VolumeCurrency { get; private set; }
         public UInt32 ServerTime { get; private set; }
 
         public static TickerInfo ReadFromJSON(string ticker)
@@ -34,14 +34,14 @@ namespace BTCeAPI
                 Low = o.Value<decimal>("low"),
                 Sell = o.Value<decimal>("sell"),
                 Volume = o.Value<decimal>("vol"),
-                VolumeCurrent = o.Value<decimal>("vol_cur"),
+                VolumeCurrency = o.Value<decimal>("vol_cur"),
                 ServerTime = o.Value<UInt32>("server_time"),
             };
         }
 
         public override string ToString()
         {
-            return string.Format("Average: {0}, Buy: {1}, High: {2}, Last: {3}, Low: {4}, Sell: {5}, Volume: {6}, VolumeCurrent: {7}, Sell: {8}", Average, Buy, High, Last, Low, Sell, Volume, VolumeCurrent, Sell);
+            return string.Format("Average: {0}, Buy: {1}, High: {2}, Last: {3}, Low: {4}, Sell: {5}, Volume: {6}, VolumeCurrent: {7}, Sell: {8}", Average, Buy, High, Last, Low, Sell, Volume, VolumeCurrency, Sell);
         }
     }
 }

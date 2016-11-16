@@ -100,6 +100,17 @@ namespace BTCeAPI
         /// </summary>
         public const int PUSH_PRICE_CHANGE_SELL_DOWN = 32;
 
+        public const int PRICE_CHANGED_BUY_UP = 1;
+        public const int PRICE_CHANGED_BUY_DOWN = 2;
+        public const int PRICE_CHANGED_SELL_UP = 4;
+        public const int PRICE_CHANGED_SELL_DOWN = 8;
+
+        public const int INFO_FIRST_TIME_CALL = 1;
+        public const int INFO_OPEN_ORDERS_CHANGED = 2;
+        public const int INFO_CURRENCY_AMOUNT_CHANGED = 4;
+        public const int INFO_RIGHTS_CHANGED = 8;
+        public const int INFO_EXCEPTION = 16;
+
         #endregion Constanrs
 
         #region Static Members
@@ -121,75 +132,56 @@ namespace BTCeAPI
 
         private Timer Ticker = new Timer();
         private Timer Fee = new Timer();
-        private Timer ActiveOrders = new Timer();
         private Timer Info = new Timer();
 
         private int tickerTimeout = 1;
         private int feeTimeout = 1;
-        private int ordersTimeout = 5;
-        private int infoTimeout = 2;
+        private int infoTimeout = 1;
         private BTCePair currency = BTCePair.btc_usd;
+        private int WebCallTimeOut = 10;
 
         private string key;
         private HMACSHA512 hashMaker;
 
-        private bool startActiveOtrders = false;
         private bool authenticated = false;
 
         private TickerInfo latestTicker = null;
-        private int latestActiveOrdersCount = -1;
-        private decimal latestTotalAmount = -1;
         private FeeInfo latestFee = null;
         private AccountInfo latestAccountInfo = null;
+
+        private object lockCredentials = new object();
         
         #endregion Private members
 
         #region Public Event Handlers
 
         /// <summary>
+        /// Public API Event
         /// Event Handler fired when new Price information is retrieved
         /// </summary>
         public EventHandler PriceChanged;
 
         /// <summary>
+        /// Public API Event
         /// Event Handler fired when new Fee information is received
         /// </summary>
         public EventHandler FeeChanged;
 
         /// <summary>
-        /// Event Handler fired when new Account information is received
+        /// Account Info related Event
+        /// Event Handler fired when some Account Information is changed or retrieved for the first time
+        /// Additional information about changed part will be send as part f the Event data
+        /// Available indicators for changed data:
+        ///     FIRST_TIME_CALL - Account Information is received for the first time
+        ///     OPEN_ORDERS_CHANGED - Open Orders count changed
+        ///     CURRENCY_AMOUNT_CHANGED - any change in the available Currencies
+        ///         As part of additional Event infromation List with Currencies will be send
+        ///     RIGHTS_CHANGED - any change in Account Rights
+        ///     EXCEPTION - teher is exception thrown during getting Account Information process
         /// This event should be used after Authentication data is provided
         ///     see method Credential(string key, string secret)
         /// </summary>
-        public EventHandler InfoReceived;
-
-        /// <summary>
-        /// Event Handler fired when new Active Orders information is received
-        /// This event should be used after Authentication data is provided
-        ///     see method Credential(string key, string secret)
-        /// </summary>
-        public EventHandler ActiveOrdersReceived;
-
-        /// <summary>
-        /// Event Handler fired when new Active Orders count has changed
-        /// This event should be used after Authentication data is provided
-        ///     see method Credential(string key, string secret)
-        /// </summary>
-        public EventHandler ActiveOrdersCountChanged;
-
-        /// <summary>
-        /// Event Handler fired when total Active Orders Amount has changed
-        /// This event should be used after Authentication data is provided
-        ///     see method Credential(string key, string secret)
-        /// </summary>
-        public EventHandler ActiveOrdersTotalAmountChanged;
-
-        /// <summary>
-        /// Event Handler fired when specific Currency Amount has changed
-        /// This event should be used after Authentication data is provided
-        ///     see method Credential(string key, string secret)
-        /// </summary>
-        public EventHandler CurrencyAmountChanged;
+        public EventHandler InfoChanged;
 
         #endregion Public Event Handlers
 
@@ -211,7 +203,7 @@ namespace BTCeAPI
         /// Sets Active Orders change retrieval period in seconds
         /// Default period is 5 seconds
         /// </summary>
-        public int OrdersTimeout { private get { return ordersTimeout; } set { ActiveOrders.Stop(); ordersTimeout = value; ActiveOrders.Interval = ordersTimeout * 1000; if (startActiveOtrders) { ActiveOrders.Start(); } } }
+        // public int OrdersTimeout { private get { return ordersTimeout; } set { ActiveOrders.Stop(); ordersTimeout = value; ActiveOrders.Interval = ordersTimeout * 1000; if (startActiveOtrders) { ActiveOrders.Start(); } } }
 
         /// <summary>
         /// Sets active Pair (Currency) that will be used for Ticker/Price and Active Orders retrieval
@@ -278,9 +270,6 @@ namespace BTCeAPI
             Fee.Start();
             CheckForNewFee(null, null);
 
-            ActiveOrders.Interval = ordersTimeout * 1000;
-            ActiveOrders.Elapsed += GetActiveOrders;
-
             Info.Interval = infoTimeout * 1000;
             Info.Elapsed += GetAccountInfo;
         }
@@ -297,25 +286,6 @@ namespace BTCeAPI
 
             return Nonce;
         }
-
-        /*
-        private static byte[] BuildPostData(Dictionary<string, string> d)
-        {
-            StringBuilder s = new StringBuilder();
-
-            foreach (var item in d)
-            {
-                s.AppendFormat("{0}={1}", item.Key, HttpUtility .UrlEncode(item.Value));
-                s.Append("&");
-            }
-            if (s.Length > 0)
-            {
-                s.Remove(s.Length - 1, 1);
-            }
-
-            return Encoding.ASCII.GetBytes(s.ToString());
-        }
-         * */
 
         private static string BuildPostData(Dictionary<string, string> d)
         {
@@ -356,10 +326,9 @@ namespace BTCeAPI
             if (request == null)
                 throw new Exception("Non HTTP WebRequest");
 
-            int TimeOut = 10;
             request.Headers = headers;
             request.Method = "POST";
-            request.Timeout = TimeOut * 1000;
+            request.Timeout = WebCallTimeOut * 1000;
             request.ContentType = "application/x-www-form-urlencoded";
             request.ContentLength = data.Length;
 
@@ -385,19 +354,36 @@ namespace BTCeAPI
         /// </summary>
         /// <param name="key">BTCe API Key</param>
         /// <param name="secret">BTCe API Sercet - it will be used once to create HMAC-SHA512 object for signing API requests </param>
+        /// <exception cref="BTCeAPI.BTCeAPIWrapper.BTCeAPIException">Thrown when privided credentials are not accepted by BTCe API</exception>
         public void Credential(string key, string secret)
         {
             Info.Stop();
-            ActiveOrders.Stop();
-
-            this.key = key;
-            hashMaker = new HMACSHA512(Encoding.ASCII.GetBytes(secret));
 
             authenticated = false;
 
-            startActiveOtrders = false;
+            lock (lockCredentials)
+            {
+                this.key = key;
+                hashMaker = new HMACSHA512(Encoding.ASCII.GetBytes(secret));
+            }
 
-            Info.Start();
+            try
+            {
+                var resultStr = Query(new Dictionary<string, string>()
+                {
+                    { "method", "getInfo" }
+                });
+
+                AccountInfo info = AccountInfo.ReadFromJSON(resultStr);
+
+                authenticated = true;
+                
+                Info.Start();
+            }
+            catch (Exception)
+            {
+                throw new BTCeAPIException("Invalid credentials");
+            }
         }
 
         /// <summary>
@@ -449,6 +435,36 @@ namespace BTCeAPI
             return OrderInfo.ReadFromJSON(resultStr);
         }
 
+        /// <summary>
+        /// Retrieves Active Orders infromation.
+        /// </summary>
+        /// <returns>List with Active Orders</returns>
+        public OrdersList GetActiveOrders()
+        {
+            var resultStr = Query(new Dictionary<string, string>()
+            {
+                { "method", "ActiveOrders" },
+                { "pair", BtcePairHelper.ToString(currency) }
+            });
+
+            try
+            {
+                OrdersList orders = OrdersList.ReadFromJSON(resultStr);
+
+                return orders;
+            }
+            catch (BTCeAPIException e)
+            {
+                logger.Error("BTC Error while retrieving Active Orders", e);
+                throw e;
+            }
+            catch (Exception ex)
+            {
+                logger.Error("Error while retrieving Active Orders", ex);
+                throw ex;
+            }
+        }
+
         #endregion Public Methods
 
         #region Timer Callbacks
@@ -459,14 +475,9 @@ namespace BTCeAPI
 
             if (FeeChanged != null)
             {
-                Fee.Interval = feeTimeout * 1000;
                 new System.Threading.Thread(CallBTCeAPIFee).Start();
 
                 return;
-            }
-            else
-            {
-                Fee.Interval = 1000;
             }
 
             Fee.Start();
@@ -490,7 +501,7 @@ namespace BTCeAPI
         {
             Info.Stop();
 
-            if (InfoReceived != null)
+            if (InfoChanged != null)
             {
                 new System.Threading.Thread(CallBTCeAPIAccountInfo).Start();
 
@@ -500,33 +511,16 @@ namespace BTCeAPI
             Info.Start();
         }
 
-        private void GetActiveOrders(object sender, ElapsedEventArgs e)
-        {
-            ActiveOrders.Stop();
-
-            if (ActiveOrdersReceived != null ||
-                ActiveOrdersCountChanged != null ||
-                ActiveOrdersTotalAmountChanged != null)
-            {
-                new System.Threading.Thread(CallBTCeAPIActiveOrders).Start();
-
-                return;
-            }
-
-            ActiveOrders.Start();
-        }
-
         #endregion Timer Callbacks
 
         #region Thread Called Methods
 
         private void CallBTCeAPITicker()
         {
-            int TimeOut = 10;
             string queryStr = string.Format(BTCeAPITickerURL, BtcePairHelper.ToString(currency));
             var request = (HttpWebRequest)WebRequest.Create(queryStr);
             request.GetResponse();
-            request.Timeout = TimeOut * 1000;
+            request.Timeout = WebCallTimeOut * 1000;
 
             if (request == null)
             {
@@ -548,45 +542,68 @@ namespace BTCeAPI
                     ((PriceChangePushIndicator & PUSH_PRICE_CHANGE_SELL_UP) > 0 && latestTicker.Sell < ticker.Sell)
                 )
                 {
-                    PriceChanged(
-                        ticker,
-                        EventArgs.Empty);
-                }
+                    PriceChangedEventArgs eventArgs = new PriceChangedEventArgs(0);
 
-                latestTicker = ticker;
+                    if (latestTicker != null)
+                    {
+                        int changedIndicator = 0;
+
+                        if (latestTicker.Buy < ticker.Buy)
+                        {
+                            changedIndicator |= PRICE_CHANGED_BUY_UP;
+                        }
+
+                        if (latestTicker.Buy > ticker.Buy)
+                        {
+                            changedIndicator |= PRICE_CHANGED_BUY_DOWN;
+                        }
+
+                        if (latestTicker.Sell < ticker.Sell)
+                        {
+                            changedIndicator |= PRICE_CHANGED_SELL_UP;
+                        }
+
+                        if (latestTicker.Sell > ticker.Sell)
+                        {
+                            changedIndicator |= PRICE_CHANGED_SELL_DOWN;
+                        }
+
+                        eventArgs = new PriceChangedEventArgs(changedIndicator);
+                    }
+
+                    PriceChanged(ticker, eventArgs);
+                }
             }
-            else
-            {
-                latestTicker = ticker;
-            }
+
+            latestTicker = ticker;
 
             Ticker.Start();
         }
 
         private void CallBTCeAPIFee()
         {
-            int TimeOut = 10;
             string queryStr = string.Format(BTCeAPIFeeURL, BtcePairHelper.ToString(currency));
             var request = (HttpWebRequest)WebRequest.Create(queryStr);
             request.GetResponse();
-            request.Timeout = TimeOut * 1000;
+            request.Timeout = WebCallTimeOut * 1000;
 
             if (request == null)
             {
                 throw new Exception("Non HTTP WebRequest");
             }
 
+            FeeInfo currentFee = FeeInfo.ReadFromJSON(new StreamReader(request.GetResponse().GetResponseStream()).ReadToEnd());
+
             if (FeeChanged != null)
             {
-                FeeInfo currentFee = FeeInfo.ReadFromJSON(new StreamReader(request.GetResponse().GetResponseStream()).ReadToEnd());
                 if (latestFee == null ||
                     latestFee.Fee != currentFee.Fee)
                 {
                     FeeChanged(currentFee, EventArgs.Empty);
                 }
-
-                latestFee = currentFee;
             }
+
+            latestFee = currentFee;
 
             Fee.Start();
         }
@@ -602,36 +619,56 @@ namespace BTCeAPI
             {
                 AccountInfo info = AccountInfo.ReadFromJSON(resultStr);
 
-                if (InfoReceived != null)
+                if (latestAccountInfo == null)
                 {
-                    InfoReceived(info, EventArgs.Empty);
+                    latestAccountInfo = info;
 
-                    authenticated = true;
-
-                    if (!startActiveOtrders)
+                    if (InfoChanged != null)
                     {
-                        ActiveOrders.Start();
-                        startActiveOtrders = true;
+                        InfoChanged(latestAccountInfo, new AccoutnInformationEventArgs(INFO_FIRST_TIME_CALL, null));
+                    }
+
+                    Info.Start();
+
+                    return;
+                }
+
+                int infoChangeReason = 0;
+
+                if (latestAccountInfo.Rights.Info != info.Rights.Info ||
+                    latestAccountInfo.Rights.Trade != info.Rights.Trade)
+                {
+                    infoChangeReason |= INFO_RIGHTS_CHANGED;
+                }
+
+                if (latestAccountInfo.OpenOrders != info.OpenOrders)
+                {
+                    infoChangeReason |= INFO_OPEN_ORDERS_CHANGED;
+                }
+
+                List<BTCeCurrency> changedCurrencies = new List<BTCeCurrency>();
+                foreach (Currency currency in latestAccountInfo.Currencies)
+                {
+                    Currency c = info.Currencies.Find(x => x.Name == currency.Name);
+                    if (c != null &&
+                        c.Value != currency.Value)
+                    {
+                        infoChangeReason |= INFO_CURRENCY_AMOUNT_CHANGED;
+                        changedCurrencies.Add(currency.Name);
                     }
                 }
-                
-                if (CurrencyAmountChanged != null)
+
+                if (infoChangeReason != 0)
                 {
-                    if (latestAccountInfo != null)
+                    if (InfoChanged != null)
                     {
-                        List<BTCeCurrency> changedCurrencies = new List<BTCeAPI.BTCeCurrency>();
-
-                        foreach (Currency c in info.Currencies)
-                        {
-                            if (c.Value != latestAccountInfo.CurrencyValue(c.Name))
-                            {
-                                changedCurrencies.Add(c.Name);
-                            }
-                        }
-
                         if (changedCurrencies.Count > 0)
                         {
-                            CurrencyAmountChanged(info, new CurrencyEventArgs(changedCurrencies));
+                            InfoChanged(latestAccountInfo, new AccoutnInformationEventArgs(infoChangeReason, changedCurrencies));
+                        }
+                        else
+                        {
+                            InfoChanged(latestAccountInfo, new AccoutnInformationEventArgs(infoChangeReason, null));
                         }
                     }
                 }
@@ -642,78 +679,11 @@ namespace BTCeAPI
             }
             catch (BTCeAPIException e)
             {
-                InfoReceived(e, EventArgs.Empty);
+                authenticated = false;
             }
             catch (Exception ex)
             {
-                InfoReceived(ex, EventArgs.Empty);
-
                 Info.Start();
-            }
-        }
-
-        private void CallBTCeAPIActiveOrders()
-        {
-            var resultStr = Query(new Dictionary<string, string>()
-            {
-                { "method", "ActiveOrders" },
-                { "pair", BtcePairHelper.ToString(currency) }
-            });
-
-            if (ActiveOrdersReceived != null ||
-                ActiveOrdersCountChanged != null ||
-                ActiveOrdersTotalAmountChanged != null)
-            {
-                try
-                {
-                    OrdersList orders = OrdersList.ReadFromJSON(resultStr);
-
-                    var totalAmount = orders.List.Sum(x => x.Value.Amount);
-
-                    if (ActiveOrdersReceived != null)
-                    {
-                        ActiveOrdersReceived(orders, EventArgs.Empty);
-                    }
-
-                    if (ActiveOrdersCountChanged != null)
-                    {
-                        if (latestActiveOrdersCount > -1 &&
-                            latestActiveOrdersCount != orders.List.Count)
-                        {
-                            ActiveOrdersCountChanged(orders, new DecimalEventArgs(latestActiveOrdersCount));
-                        }
-                    }
-
-                    if (ActiveOrdersTotalAmountChanged != null)
-                    {
-                        if (latestTotalAmount > -1 &&
-                            latestTotalAmount != totalAmount)
-                        {
-                            ActiveOrdersTotalAmountChanged(orders, new DecimalEventArgs(latestTotalAmount));
-                        }
-                    }
-
-                    if (latestActiveOrdersCount != orders.List.Count)
-                    {
-                        latestActiveOrdersCount = orders.List.Count;
-                    }
-
-                    if (latestTotalAmount != totalAmount)
-                    {
-                        latestTotalAmount = totalAmount;
-                    }
-
-                    ActiveOrders.Start();
-                }
-                catch (BTCeAPIException e)
-                {
-                    ActiveOrdersReceived(e, EventArgs.Empty);
-                }
-                catch (Exception ex)
-                {
-                    ActiveOrdersReceived(ex, EventArgs.Empty);
-                }
-
             }
         }
 

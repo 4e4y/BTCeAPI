@@ -42,7 +42,6 @@ namespace BTCeAPI
     {
         public List<Currency> Currencies { get; private set; }
         public Rights Rights { get; private set; }
-        public int TransactionsCount { get; private set; }
         public int OpenOrders { get; private set; }
         public int ServerTime { get; private set; }
 
@@ -74,7 +73,6 @@ namespace BTCeAPI
 
             sb.AppendLine(string.Format("Rights: Info: {0}; Trade: {1}", Rights.Info, Rights.Trade));
 
-            sb.AppendLine(string.Format("Transactions Count: {0}", TransactionsCount));
             sb.AppendLine(string.Format("Open Orders: {0}", OpenOrders));
 
             return sb.ToString();
@@ -101,7 +99,6 @@ namespace BTCeAPI
                 {
                     Currencies = currencies,
                     Rights = Rights.ReadFromJSON(data["rights"] as JObject),
-                    TransactionsCount = data.Value<int>("transaction_count"),
                     OpenOrders = data.Value<int>("open_orders"),
                     ServerTime = data.Value<int>("server_time")
                 };
